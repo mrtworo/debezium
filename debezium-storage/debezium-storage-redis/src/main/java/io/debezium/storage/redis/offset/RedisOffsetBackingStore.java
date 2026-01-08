@@ -45,7 +45,7 @@ public class RedisOffsetBackingStore extends MemoryOffsetBackingStore {
         this.client = client;
     }
 
-    void connect() {
+    synchronized void connect() {
         closeClient();
         RedisConnection redisConnection = RedisConnection.getInstance(config);
         client = redisConnection.getRedisClient(RedisConnection.DEBEZIUM_OFFSETS_CLIENT_NAME, config.isWaitEnabled(), config.getWaitTimeout(),
@@ -99,6 +99,9 @@ public class RedisOffsetBackingStore extends MemoryOffsetBackingStore {
     void load() {
         // fetch the value from Redis
         Map<String, String> offsets = Uni.createFrom().item(() -> {
+            if (client == null) {
+                throw new RedisClientConnectionException(new RuntimeException("Redis client is not connected"));
+            }
             return (Map<String, String>) client.hgetAll(config.getRedisKeyName());
         })
                 // handle failures and retry
@@ -142,6 +145,9 @@ public class RedisOffsetBackingStore extends MemoryOffsetBackingStore {
             byte[] value = (mapEntry.getValue() != null) ? mapEntry.getValue().array() : null;
             // set the value in Redis
             Uni.createFrom().item(() -> {
+                if (client == null) {
+                    throw new RedisClientConnectionException(new RuntimeException("Redis client is not connected"));
+                }
                 return (Long) client.hset(config.getRedisKeyName().getBytes(), key, value);
             })
                     // handle failures and retry
